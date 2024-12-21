@@ -1,0 +1,75 @@
+use CsvHandlerDb;
+
+CREATE TABLE dbo.TripRecord
+(
+    Id INT IDENTITY(1,1) NOT NULL,
+    PickupDatetime      DATETIME        NOT NULL,
+    DropoffDatetime     DATETIME        NOT NULL,
+    PassengerCount      INT             NOT NULL,
+    TripDistance        FLOAT           NOT NULL,
+    StoreAndFwdFlag     NVARCHAR(255)     NULL,
+    PULocationID        INT             NOT NULL,
+    DOLocationID        INT             NOT NULL,
+    FareAmount          DECIMAL(10,2)   NOT NULL,
+    TipAmount           DECIMAL(10,2)   NOT NULL,
+    
+    CONSTRAINT PK_TripRecord_Id PRIMARY KEY CLUSTERED (Id)
+);
+
+CREATE INDEX IX_TripRecord_PULocationID ON TripRecord (PULocationID);
+
+-- Index for sorting by trip distance
+CREATE INDEX IX_TripRecord_TripDistance ON TripRecord (TripDistance DESC);
+
+-- Add computed column for travel time
+ALTER TABLE TripRecord
+ADD TravelTimeInMinutes AS DATEDIFF(MINUTE, PickupDatetime, DropoffDatetime) PERSISTED;
+
+-- Index for sorting by travel time
+CREATE INDEX IX_TripRecord_TravelTimeInMinutes ON TripRecord (TravelTimeInMinutes DESC)
+
+CREATE INDEX IX_TripRecord_DuplicateCheck ON TripRecord (PickupDatetime, DropoffDatetime, PassengerCount);
+
+CREATE INDEX IX_TripRecord_DuplicationsCheck ON TripRecord (PickupDatetime, DropoffDatetime, PassengerCount, Id);
+
+
+-- Which PULocationID has the highest average TipAmount?
+SELECT PULocationID, AVG(TipAmount) AS AvgTip
+FROM TripRecord
+GROUP BY PULocationID
+ORDER BY AvgTip DESC;
+
+-- Top 100 longest fares by TripDistance:
+SELECT TOP 100 *
+FROM TripRecord
+ORDER BY TripDistance DESC;
+
+-- Top 100 longest fares by travel time:
+SELECT TOP 100 *
+FROM TripRecord
+ORDER BY DATEDIFF(MINUTE, PickupDatetime, DropoffDatetime) DESC;
+
+-- Search where part of the conditions is PULocationID:
+
+SELECT *
+FROM TripRecord
+WHERE PULocationID = 238;
+
+
+-- Get duplications
+WITH CTE AS
+(
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY PickupDatetime, DropoffDatetime, PassengerCount
+               ORDER BY Id
+           ) AS RowNum
+    FROM TripRecord
+)
+SELECT *
+FROM CTE
+WHERE RowNum > 1
+ORDER BY PickupDatetime, DropoffDatetime, PassengerCount;
+
+
+
